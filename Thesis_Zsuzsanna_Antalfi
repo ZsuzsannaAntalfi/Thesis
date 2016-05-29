@@ -1,18 +1,19 @@
+#Imports
 import pandas as pd
 import numpy as np
 import pytz
 import statsmodels.api as sm
 
 def initialize(context):
-    #kereskedesi/backtester beallitasok:
-    #kereskedes hatasa a piacra, itt nincs hatasa
+    #backtester settings
+    #fixed slippage - the algorithm's impact on the market, here it is zero
     set_slippage(slippage.FixedSlippage(spread=0))
-    #minden kereskedes 10 centbe kerul:
+    #every trade costs 1 dollar
     set_commission(commission.PerTrade(cost=1))
-    #megnezni hogy az adott reszveny 2015.01.01 letezett-e a piacon
+    #check if the symbol was on the market on 1 January 2015
     set_symbol_lookup_date('2015-01-01')
     
-    #reszvenyparok
+    #stock pairs
     context.stock_pairs = [(sid(14014), sid(2853)),
                            (sid(1900), sid(2518)),
                           (sid(4485), sid(34014)),
@@ -24,45 +25,43 @@ def initialize(context):
         context.security_list.append(first_sec)
         context.security_list.append(second_sec)    
     
-    #parok szama
+    #number of stock pairs
     context.number_of_pairs=len(context.stock_pairs)
     
-    #mennyi idointervallumra tekint vissza az algoritmus
+    #timeframe for the lookback period
     context.movingaverage_timeframe = 30
     context.zscore_timeframe=30
     
-    #spread tablazat keszitese, egyelore ures
+    #spread
     context.spread = np.ndarray((context.number_of_pairs, 0))
     #context.spreads=[]
     
-    #kereskedesben van-e a reszveny
+    #check if the stock in trade, at the beginning it is set to false
     context.inshort=[False] * context.number_of_pairs
     context.inlong=[False] * context.number_of_pairs
     
-    #a kereskedes utemezese: zaras elott fel oraval minden nap
+    #scheduling the trading to 30 minutes before closing every day
     schedule_function(handle_data,date_rules.every_day(), time_rules.market_close(minutes=30))
   
-    
-    
-    #dollar-neutral tulajdonsag elerese
+    #setting the dollar-neutral property
     context.max_notional = 100000
     context.min_notional = -100000
     
 def handle_data(context, data):
-    #visszaadja az osszes kosarban levo reszveny erteket, de egyre is lehetne specializalni
+    #gives back the stocks  az osszes kosarban levo reszveny erteket, de egyre is lehetne specializalni
     if get_open_orders():
         return
     
-    #hisztorikus arak
+    #historical prices
     price_history=data.history(context.security_list,'price',365, '1d')
 
-    #ebbol en az utolso 30 adatot vizsgalom foleg, mintat veszek
+    #sampling the last 30 days
     prices=price_history.iloc[-context.movingaverage_timeframe::]
     
-    #????????????????????????????????
+    #spread
     new_spreads = np.ndarray((context.number_of_pairs, 1))
     
-    #paronkent szamolja a betat
+    #calculating the beta for each pair
     for i in range(context.number_of_pairs):
 
         (stock1, stock2) = context.stock_pairs[i]
@@ -73,14 +72,15 @@ def handle_data(context, data):
         hedge_ratio = ols_transform(prices, S1, S2)
       
      
-        #spread szamolasa
+        #calculating the spread
         #new_spreads[i,:] = data[stock1].price -hedge_ratio*data[stock2].price
        
         new_spreads[i,:] = data.current(stock1, 'price') - hedge_ratio * data.current(stock2, 'price') 
         
-        #.shape[i] resz a sorokat nezi az arrayben
+        #trading
         if context.spread.shape[1] > context.zscore_timeframe:
-            #ha a feltetel teljesul akkor ujraszamolja a spread-et a zscore idejere
+            
+            #if necessary, recalculating the z-score for the sampling timeframe
             spreads = context.spread[i, -context.zscore_timeframe:]
 
             zscore = (spreads[-1] - spreads.mean()) / spreads.std()
@@ -111,6 +111,7 @@ def handle_data(context, data):
         
     context.spread = np.hstack([context.spread, new_spreads])
              
+#OLS regression             
 def ols_transform(prices, S1, S2):
     S2 = sm.add_constant(S2, prepend=True)
     hedge_ratio = sm.OLS(S1, S2).fit().params[0]
