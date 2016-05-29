@@ -16,9 +16,9 @@ def initialize(context):
     #stock pairs
     context.stock_pairs = [(sid(14014), sid(2853)),
                            (sid(1900), sid(2518)),
-                          (sid(4485), sid(34014)),
-                          (sid(8677), sid(34014)),
-                          (sid(67), sid(13940))]
+                           (sid(4485), sid(34014)),
+                           (sid(8677), sid(34014)),
+                           (sid(67), sid(13940))]
     
     context.security_list = []
     for first_sec, second_sec in context.stock_pairs:
@@ -84,21 +84,20 @@ def handle_data(context, data):
             spreads = context.spread[i, -context.zscore_timeframe:]
 
             zscore = (spreads[-1] - spreads.mean()) / spreads.std()
-            
         
             #2=entry threshold
-            if zscore >2 and (not context.inlong[i]) and all(data.can_trade([stock1,stock2])):
+            if zscore >2 and (not context.inshort[i]) and all(data.can_trade([stock1,stock2])):
                 order_target_percent(stock1, -0.5) 
                 order_target_percent(stock2, 0.5) 
-                context.inlong[i] = True
-                context.inshort[i] = False
-            
-            #-2=entry threshold
-            elif zscore < -2  and (not context.inshort[i]) and all(data.can_trade([stock1,stock2])):
-                order_target_percent(stock1, 0.5) 
-                order_target_percent(stock2, -0.5)  
                 context.inlong[i] = False
                 context.inshort[i] = True
+            
+            #-2=entry threshold
+            elif zscore < -2  and (not context.inlong[i]) and all(data.can_trade([stock1,stock2])):
+                order_target_percent(stock1, 0.5) 
+                order_target_percent(stock2, -0.5)  
+                context.inlong[i] = True
+                context.inshort[i] = False
                 
             #1=exit threshold
             elif abs(zscore) < 1  and all(data.can_trade([stock1,stock2])):
